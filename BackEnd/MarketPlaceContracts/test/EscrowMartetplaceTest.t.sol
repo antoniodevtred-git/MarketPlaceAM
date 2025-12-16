@@ -225,4 +225,47 @@ contract EscrowMarketplaceTest is Test {
         vm.expectRevert(bytes("07"));
         marketplace.cancelPurchase(itemId);
     }
+
+    function testBuyDirectWorks() public {
+        createItem();
+
+        uint256 sellerBefore = seller.balance;
+
+        vm.prank(buyer);
+        marketplace.buyDirect{value: ethPrice}(itemId, ethPrice);
+
+        assertEq(seller.balance, sellerBefore + ethPrice);
+
+        EscrowMarketplace.Item memory item = marketplace.getItem(itemId);
+        assertTrue(item.sold);
+    }
+
+    function testBuyDirectRevertsIfInvalidItem() public {
+        vm.prank(buyer);
+        vm.expectRevert(bytes("04"));
+        marketplace.buyDirect{value: ethPrice}(999, ethPrice);
+    }
+
+    function testBuyDirectRevertsIfAlreadySold() public {
+        createItem();
+
+        vm.prank(buyer);
+        marketplace.buyDirect{value: ethPrice}(itemId, ethPrice);
+
+        vm.prank(random);
+        vm.expectRevert(bytes("05"));
+        marketplace.buyDirect{value: ethPrice}(itemId, ethPrice);
+    }
+
+    function testBuyDirectRevertsIfWrongAmount() public {
+        createItem();
+
+        vm.prank(buyer);
+        vm.expectRevert(bytes("11"));
+        marketplace.buyDirect{value: ethPrice - 1}(itemId, ethPrice);
+    }
+
+
+
+
 }
