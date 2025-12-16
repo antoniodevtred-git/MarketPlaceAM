@@ -33,10 +33,6 @@ contract EscrowMarketplace is Ownable, ReentrancyGuard {
 
     constructor(address owner_) Ownable(owner_) {}
 
-    // -----------------------------------
-    // ADMIN / SELLER: LISTAR ITEMS
-    // -----------------------------------
-
     function listItem(uint256 itemId, address payable seller, uint256 usdPrice)
         external 
         onlyOwner 
@@ -55,10 +51,6 @@ contract EscrowMarketplace is Ownable, ReentrancyGuard {
 
         emit ItemListed(itemId, seller, usdPrice);
     }
-
-    // -----------------------------------
-    // BUYER: INICIAR COMPRA (ESCROW)
-    // -----------------------------------
 
     function startPurchase(uint256 itemId, uint256 requiredEth)
         external 
@@ -83,9 +75,6 @@ contract EscrowMarketplace is Ownable, ReentrancyGuard {
         emit PurchaseStarted(itemId, msg.sender, msg.value);
     }
 
-    // -----------------------------------
-    // BUYER: CONFIRMAR RECEPCION
-    // -----------------------------------
 
     function confirmPurchase(uint256 itemId) external nonReentrant {
         Item storage item = items[itemId];
@@ -110,9 +99,6 @@ contract EscrowMarketplace is Ownable, ReentrancyGuard {
         emit PurchaseConfirmed(itemId, msg.sender, seller, amount);
     }
 
-    // -----------------------------------
-    // BUYER: CANCELAR COMPRA
-    // -----------------------------------
 
     function cancelPurchase(uint256 itemId) external nonReentrant {
         Item storage item = items[itemId];
@@ -135,9 +121,6 @@ contract EscrowMarketplace is Ownable, ReentrancyGuard {
         emit PurchaseCancelled(itemId, msg.sender, amount);
     }
 
-    // -----------------------------------
-    // VIEW FUNCTIONS
-    // -----------------------------------
 
     function getItem(uint256 itemId) external view returns (Item memory) {
         return items[itemId];
@@ -147,6 +130,20 @@ contract EscrowMarketplace is Ownable, ReentrancyGuard {
         return escrows[itemId];
     }
 
+    function buyDirect(uint256 itemId, uint256 requiredEth) external payable nonReentrant {
+        Item storage item = items[itemId];
+
+        require(item.exists, "04");
+        require(!item.sold, "05");
+        require(msg.value >= requiredEth, "11");
+
+        item.sold = true;
+
+        (bool sent, ) = item.seller.call{value: msg.value}("");
+        require(sent, "08");
+
+        emit PurchaseConfirmed(itemId, msg.sender, item.seller, msg.value);
+    }
     
     function _forceSetSold(uint256 itemId) external { //  -----> ONLY FOR TESTING — DO NOT DEPLOY IN PRODUCTION
         items[itemId].sold = true;
