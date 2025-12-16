@@ -3,9 +3,12 @@ pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
 import "../src/EscrowMarketplace.sol";
+import "../src/MarketToken.sol";
+
 
 contract EscrowMarketplaceTest is Test {
 
+    MarketToken token;
     EscrowMarketplace marketplace;
 
     address owner = address(1);
@@ -22,7 +25,10 @@ contract EscrowMarketplaceTest is Test {
         vm.deal(seller, 10 ether);
         vm.deal(random, 10 ether);
 
-        marketplace = new EscrowMarketplace(owner);
+        vm.prank(owner);
+        token = new MarketToken("Market Token", "MKT", owner);
+
+        marketplace = new EscrowMarketplace(owner, address(token));
     }
 
     // ------------------------------------------------------------
@@ -225,4 +231,121 @@ contract EscrowMarketplaceTest is Test {
         vm.expectRevert(bytes("07"));
         marketplace.cancelPurchase(itemId);
     }
+
+    function testBuyDirectWorks() public {
+        createItem();
+
+        uint256 sellerBefore = seller.balance;
+
+        vm.prank(buyer);
+        marketplace.buyDirect{value: ethPrice}(itemId, ethPrice);
+
+        assertEq(seller.balance, sellerBefore + ethPrice);
+
+        EscrowMarketplace.Item memory item = marketplace.getItem(itemId);
+        assertTrue(item.sold);
+    }
+
+    function testBuyDirectRevertsIfInvalidItem() public {
+        vm.prank(buyer);
+        vm.expectRevert(bytes("04"));
+        marketplace.buyDirect{value: ethPrice}(999, ethPrice);
+    }
+
+    function testBuyDirectRevertsIfAlreadySold() public {
+        createItem();
+
+        vm.prank(buyer);
+        marketplace.buyDirect{value: ethPrice}(itemId, ethPrice);
+
+        vm.prank(random);
+        vm.expectRevert(bytes("05"));
+        marketplace.buyDirect{value: ethPrice}(itemId, ethPrice);
+    }
+
+    function testBuyDirectRevertsIfWrongAmount() public {
+        createItem();
+
+        vm.prank(buyer);
+        vm.expectRevert(bytes("11"));
+        marketplace.buyDirect{value: ethPrice - 1}(itemId, ethPrice);
+    }
+
+    function testBuyDirectWithTokenWorks() public {
+        createItem();
+
+        uint256 amount = 500 ether;
+
+        // Mint tokens to buyer (owner is the token owner)
+        vm.prank(owner);
+        token.mint(buyer, amount);
+
+        uint256 sellerBefore = token.balanceOf(seller);
+
+        // Approve + buy
+        vm.startPrank(buyer);
+        token.approve(address(marketplace), amount);
+        marketplace.buyDirectWithToken(itemId, amount);
+        vm.stopPrank();
+
+        // Seller received tokens
+        assertEq(token.balanceOf(seller), sellerBefore + amount);
+
+        // Item sold
+        EscrowMarketplace.Item memory item = marketplace.getItem(itemId);
+        assertTrue(item.sold);
+    }
+
+    function testBuyDirectWithTokenRevertsIfInvalidItem() public {
+        vm.prank(buyer);
+        vm.expectRevert(bytes("04"));
+        marketplace.buyDirectWithToken(999, 1 ether);
+    }
+
+    function testBuyDirectWithTokenRevertsIfAlreadySold() public {
+        createItem();
+
+        // Mark as sold (owner-only helper)
+        vm.prank(owner);
+        marketplace._forceSetSold(itemId);
+
+        vm.prank(buyer);
+        vm.expectRevert(bytes("05"));
+        marketplace.buyDirectWithToken(itemId, 1 ether);
+    }
+
+    function testBuyDirectWithTokenRevertsIfZeroAmount() public {
+        createItem();
+
+        vm.prank(buyer);
+        vm.expectRevert(bytes("15"));
+        marketplace.buyDirectWithToken(itemId, 0);
+    }
+
+    function testBuyDirectWithTokenRevertsIfNoApprovalOrBalance() public {
+        createItem();
+
+        uint256 amount = 100 ether;
+
+        // buyer has 0 tokens and no approval -> transferFrom should fail => "15"
+        vm.prank(buyer);
+        vm.expectRevert();
+        marketplace.buyDirectWithToken(itemId, amount);
+    }
+
+    function testBuyDirectWithTokenRevertsIfNotEnoughAllowance() public {
+        createItem();
+
+        uint256 amount = 100 ether;
+
+        vm.prank(owner);
+        token.mint(buyer, amount);
+
+        vm.startPrank(buyer);
+        token.approve(address(marketplace), amount - 1);
+        vm.expectRevert();
+        marketplace.buyDirectWithToken(itemId, amount);
+        vm.stopPrank();
+    }
+
 }

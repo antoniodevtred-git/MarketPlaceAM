@@ -3,13 +3,13 @@ pragma solidity 0.8.24;
 
 import "../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 import "../lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
+import "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 contract EscrowMarketplace is Ownable, ReentrancyGuard {
-
     struct Item {
         uint256 id;
         address payable seller;
-        uint256 usdPrice;  // Precio FIJO en USD
+        uint256 usdPrice; // Precio FIJO en USD
         bool exists;
         bool sold;
     }
@@ -26,21 +26,23 @@ contract EscrowMarketplace is Ownable, ReentrancyGuard {
     // itemId => Escrow
     mapping(uint256 => Escrow) public escrows;
 
+    // Token ERC20 para pagos alternativos (MarketToken)
+    IERC20 public immutable paymentToken;
+
     event ItemListed(uint256 indexed itemId, address indexed seller, uint256 usdPrice);
     event PurchaseStarted(uint256 indexed itemId, address indexed buyer, uint256 amount);
     event PurchaseConfirmed(uint256 indexed itemId, address indexed buyer, address indexed seller, uint256 amount);
     event PurchaseCancelled(uint256 indexed itemId, address indexed buyer, uint256 amount);
 
-    constructor(address owner_) Ownable(owner_) {}
+    constructor(address owner_, address paymentToken_) Ownable(owner_) {
+        require(paymentToken_ != address(0), "20"); // INVALID_TOKEN
+        paymentToken = IERC20(paymentToken_);
+    }
 
     // -----------------------------------
-    // ADMIN / SELLER: LISTAR ITEMS
+    // ADMIN: LISTAR ITEMS
     // -----------------------------------
-
-    function listItem(uint256 itemId, address payable seller, uint256 usdPrice)
-        external 
-        onlyOwner 
-    {
+    function listItem(uint256 itemId, address payable seller, uint256 usdPrice) external onlyOwner {
         require(usdPrice > 0, "01");
         require(!items[itemId].exists, "02");
         require(seller != address(0), "03");
@@ -57,36 +59,24 @@ contract EscrowMarketplace is Ownable, ReentrancyGuard {
     }
 
     // -----------------------------------
-    // BUYER: INICIAR COMPRA (ESCROW)
+    // BUYER: INICIAR COMPRA (ESCROW ETH)
     // -----------------------------------
-
-    function startPurchase(uint256 itemId, uint256 requiredEth)
-        external 
-        payable 
-        nonReentrant 
-    {
+    function startPurchase(uint256 itemId, uint256 requiredEth) external payable nonReentrant {
         Item storage item = items[itemId];
 
         require(item.exists, "04");
         require(!item.sold, "05");
         require(!escrows[itemId].active, "10");
-
-        // Pago dinámico basado en USD → ETH
         require(msg.value >= requiredEth, "11");
 
-        escrows[itemId] = Escrow({
-            buyer: payable(msg.sender),
-            amount: msg.value,
-            active: true
-        });
+        escrows[itemId] = Escrow({ buyer: payable(msg.sender), amount: msg.value, active: true });
 
         emit PurchaseStarted(itemId, msg.sender, msg.value);
     }
 
     // -----------------------------------
-    // BUYER: CONFIRMAR RECEPCION
+    // BUYER: CONFIRMAR RECEPCION (ESCROW ETH)
     // -----------------------------------
-
     function confirmPurchase(uint256 itemId) external nonReentrant {
         Item storage item = items[itemId];
         Escrow storage esc = escrows[itemId];
@@ -99,21 +89,21 @@ contract EscrowMarketplace is Ownable, ReentrancyGuard {
         uint256 amount = esc.amount;
         address payable seller = item.seller;
 
-        // UPDATE STATE
+        // EFFECTS
         item.sold = true;
         esc.active = false;
         esc.amount = 0;
 
-        // TRANSFER FUNDS
-        (bool sent, ) = seller.call{value: amount}("");
+        // INTERACTIONS
+        (bool sent, ) = seller.call{ value: amount }("");
         require(sent, "08");
+
         emit PurchaseConfirmed(itemId, msg.sender, seller, amount);
     }
 
     // -----------------------------------
-    // BUYER: CANCELAR COMPRA
+    // BUYER: CANCELAR COMPRA (ESCROW ETH)
     // -----------------------------------
-
     function cancelPurchase(uint256 itemId) external nonReentrant {
         Item storage item = items[itemId];
         Escrow storage esc = escrows[itemId];
@@ -125,20 +115,60 @@ contract EscrowMarketplace is Ownable, ReentrancyGuard {
 
         uint256 amount = esc.amount;
 
-        // UPDATE STATE
+        // EFFECTS
         esc.active = false;
         esc.amount = 0;
 
-        // REFUND
-        (bool sent, ) = esc.buyer.call{value: amount}("");
+        // INTERACTIONS
+        (bool sent, ) = esc.buyer.call{ value: amount }("");
         require(sent, "09");
+
         emit PurchaseCancelled(itemId, msg.sender, amount);
     }
 
     // -----------------------------------
-    // VIEW FUNCTIONS
+    // BUYER: COMPRA DIRECTA CON ETH (SIN ESCROW)
     // -----------------------------------
+    function buyDirect(uint256 itemId, uint256 requiredEth) external payable nonReentrant {
+        Item storage item = items[itemId];
 
+        require(item.exists, "04");
+        require(!item.sold, "05");
+        require(msg.value >= requiredEth, "11");
+
+        // EFFECTS
+        item.sold = true;
+
+        // INTERACTIONS
+        (bool sent, ) = item.seller.call{ value: msg.value }("");
+        require(sent, "08");
+
+        emit PurchaseConfirmed(itemId, msg.sender, item.seller, msg.value);
+    }
+
+    // -----------------------------------
+    // BUYER: COMPRA DIRECTA CON ERC20 (SIN ESCROW)
+    // -----------------------------------
+    function buyDirectWithToken(uint256 itemId, uint256 tokenAmount) external nonReentrant {
+        Item storage item = items[itemId];
+
+        require(item.exists, "04");
+        require(!item.sold, "05");
+        require(tokenAmount > 0, "15");
+
+        // EFFECTS
+        item.sold = true;
+
+        // INTERACTIONS
+        bool ok = paymentToken.transferFrom(msg.sender, item.seller, tokenAmount);
+        require(ok, "15"); // TOKEN_TRANSFER_FAILED
+
+        emit PurchaseConfirmed(itemId, msg.sender, item.seller, tokenAmount);
+    }
+
+    // -----------------------------------
+    // VIEW
+    // -----------------------------------
     function getItem(uint256 itemId) external view returns (Item memory) {
         return items[itemId];
     }
@@ -147,8 +177,8 @@ contract EscrowMarketplace is Ownable, ReentrancyGuard {
         return escrows[itemId];
     }
 
-    
-    function _forceSetSold(uint256 itemId) external { //  -----> ONLY FOR TESTING — DO NOT DEPLOY IN PRODUCTION
+    // ⚠️ SOLO PARA TESTING: mejor protegerlo para no dejar backdoor accidental
+    function _forceSetSold(uint256 itemId) external onlyOwner {
         items[itemId].sold = true;
     }
 }
