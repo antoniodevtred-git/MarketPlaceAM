@@ -130,7 +130,7 @@ contract EscrowMarketplace is Ownable, ReentrancyGuard {
 
         require(item.exists, "04");
         require(!item.sold, "05");
-        require(tokenAmount_ > 0, "15");
+        require(tokenAmount_ > 0, "13");
 
         item.sold = true;
 
