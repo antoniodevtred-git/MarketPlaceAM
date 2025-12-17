@@ -4,6 +4,8 @@ pragma solidity 0.8.24;
 import "../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 import "../lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import "./interfaces/ITokenizerNFT.sol";
+
 
 contract EscrowMarketplace is Ownable, ReentrancyGuard {
     struct Item {
@@ -20,8 +22,12 @@ contract EscrowMarketplace is Ownable, ReentrancyGuard {
         bool active;
     }
 
+    ITokenizerNFT public tokenizerNFT;
+
     mapping(uint256 => Item) public items;
     mapping(uint256 => Escrow) public escrows;
+    mapping(uint256 => uint256) public itemToToken;
+
 
     IERC20 public immutable paymentToken;
 
@@ -30,10 +36,14 @@ contract EscrowMarketplace is Ownable, ReentrancyGuard {
     event PurchaseConfirmed(uint256 indexed itemId_, address indexed buyer_, address indexed seller_, uint256 amount_);
     event PurchaseCancelled(uint256 indexed itemId_, address indexed buyer_, uint256 amount_);
 
-    constructor(address owner_, address paymentToken_) Ownable(owner_) {
+    constructor(address owner_, address paymentToken_, address tokenizerNFT_) Ownable(owner_) {
         require(paymentToken_ != address(0), "20");
+        require(tokenizerNFT_ != address(0), "21");
+
         paymentToken = IERC20(paymentToken_);
+        tokenizerNFT = ITokenizerNFT(tokenizerNFT_);
     }
+
 
     function listItem(uint256 itemId_, address payable seller_, uint256 usdPrice_) external onlyOwner {
         require(usdPrice_ > 0, "01");
@@ -80,12 +90,18 @@ contract EscrowMarketplace is Ownable, ReentrancyGuard {
         uint256 amount_ = esc.amount;
         address payable seller_ = item.seller;
 
+        // 🔒 STATE CHANGES
         item.sold = true;
         esc.active = false;
         esc.amount = 0;
 
+        // 💰 TRANSFER ETH
         (bool sent_, ) = seller_.call{ value: amount_ }("");
         require(sent_, "08");
+
+        // 🖼️ TRANSFER NFT (CORRECTO)
+        uint256 tokenId_ = itemToToken[itemId_];
+        tokenizerNFT.safeTransferFrom(address(this), msg.sender, tokenId_);
 
         emit PurchaseConfirmed(itemId_, msg.sender, seller_, amount_);
     }
@@ -122,23 +138,72 @@ contract EscrowMarketplace is Ownable, ReentrancyGuard {
         (bool sent_, ) = item.seller.call{ value: msg.value }("");
         require(sent_, "08");
 
+        uint256 tokenId_ = itemToToken[itemId_];
+        tokenizerNFT.safeTransferFrom(address(this),msg.sender,tokenId_);
+
         emit PurchaseConfirmed(itemId_, msg.sender, item.seller, msg.value);
     }
 
-    function buyDirectWithToken(uint256 itemId_, uint256 tokenAmount_) external nonReentrant {
+    function buyDirectWithToken(uint256 itemId_, uint256 tokenAmount_) external nonReentrant{
         Item storage item = items[itemId_];
 
         require(item.exists, "04");
         require(!item.sold, "05");
         require(tokenAmount_ > 0, "13");
 
+        uint256 tokenId_ = itemToToken[itemId_];
+        require(tokenId_ != 0, "26");
+
+        // 🔒 STATE CHANGE FIRST
         item.sold = true;
 
-        bool ok_ = paymentToken.transferFrom(msg.sender, item.seller, tokenAmount_);
-        require(ok_, "15");
+        // 💰 TOKEN TRANSFER
+        bool ok_ = paymentToken.transferFrom(
+            msg.sender,
+            item.seller,
+            tokenAmount_
+        );
+        require(ok_, "15"); 
 
-        emit PurchaseConfirmed(itemId_, msg.sender, item.seller, tokenAmount_);
+        // 🖼️ NFT TRANSFER
+        tokenizerNFT.safeTransferFrom(
+            address(this),
+            msg.sender,
+            tokenId_
+        );
+
+        emit PurchaseConfirmed(
+            itemId_,
+            msg.sender,
+            item.seller,
+            tokenAmount_
+        );
     }
+
+
+    function listItemWithNFT(uint256 itemId_, address payable seller_, uint256 usdPrice_, uint256 tokenId_) external onlyOwner {
+        require(!items[itemId_].exists, "02");
+        require(seller_ != address(0), "03");
+
+        // El marketplace debe ser owner del NFT
+        require(
+            tokenizerNFT.ownerOf(tokenId_) == address(this),
+            "16" // NOT_NFT_OWNER
+        );
+
+        items[itemId_] = Item({
+            id: itemId_,
+            seller: seller_,
+            usdPrice: usdPrice_,
+            exists: true,
+            sold: false
+        });
+
+        itemToToken[itemId_] = tokenId_;
+
+        emit ItemListed(itemId_, seller_, usdPrice_);
+    }
+
 
     function getItem(uint256 itemId_) external view returns (Item memory) {
         return items[itemId_];

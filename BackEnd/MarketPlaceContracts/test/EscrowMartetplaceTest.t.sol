@@ -3,33 +3,45 @@ pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
 import "../src/EscrowMarketplace.sol";
+import "../src/MarketplaceAsset.sol";
 import "../src/MarketToken.sol";
 
 
 contract EscrowMarketplaceTest is Test {
-
-    MarketToken token;
     EscrowMarketplace marketplace;
+    MarketToken paymentToken;
+    MarketplaceAsset tokenizerNFT;
 
     address owner = address(1);
     address seller = address(2);
-    address buyer = address(3);
-    address random = address(4);
+    address buyer  = address(3);
 
     uint256 itemId = 1;
-    uint256 usdPrice = 2000 * 1e8; // 2000 USD en 8 decimales
-    uint256 ethPrice = 1 ether;    // lo simula el front
+    uint256 usdPrice = 2000 * 1e8;
+    uint256 tokenId;
 
-    function setUp() public {
-        vm.deal(buyer, 10 ether);
-        vm.deal(seller, 10 ether);
-        vm.deal(random, 10 ether);
 
-        vm.prank(owner);
-        token = new MarketToken("Market Token", "MKT", owner);
+   function setUp() public {
+    vm.deal(buyer, 10 ether);
+    vm.deal(seller, 10 ether);
 
-        marketplace = new EscrowMarketplace(owner, address(token));
-    }
+    vm.prank(owner);
+    paymentToken = new MarketToken("Market Token", "MKT", owner);
+
+    vm.prank(owner);
+    tokenizerNFT = new MarketplaceAsset(
+        "MarketplaceAsset",
+        "ASSET",
+        owner
+    );
+
+    vm.prank(owner);
+    marketplace = new EscrowMarketplace(
+        owner,
+        address(paymentToken),
+        address(tokenizerNFT)
+    );
+}
 
     // ------------------------------------------------------------
     // HELPERS
@@ -347,5 +359,19 @@ contract EscrowMarketplaceTest is Test {
         marketplace.buyDirectWithToken(itemId, amount);
         vm.stopPrank();
     }
+    function testBuyDirectWithTokenTransfersNFT() public {
+        createItemAndLinkNFT();
+
+        vm.prank(owner);
+        token.mint(buyer, 100 ether);
+
+        vm.startPrank(buyer);
+        token.approve(address(marketplace), 100 ether);
+        marketplace.buyDirectWithToken(itemId, 100 ether);
+        vm.stopPrank();
+
+        assertEq(tokenizerNFT.ownerOf(tokenId), buyer);
+    }
+    
 
 }
