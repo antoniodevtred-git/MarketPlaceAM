@@ -16,10 +16,10 @@ contract MarketToken is ERC20, Ownable {
     }
 
     
-    function mint(address to, uint256 amount) external onlyOwner {
-        require(to != address(0), "12");
-        require(amount > 0, "13");
+    function mint(address to_, uint256 amount_) external onlyOwner {
+        require(to_ != address(0), "12");
+        require(amount_ > 0, "13");
 
-        _mint(to, amount);
+        _mint(to_, amount_);
     }
 }
