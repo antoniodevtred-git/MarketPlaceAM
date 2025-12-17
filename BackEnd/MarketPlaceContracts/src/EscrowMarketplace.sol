@@ -3,152 +3,152 @@ pragma solidity 0.8.24;
 
 import "../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 import "../lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
+import "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 contract EscrowMarketplace is Ownable, ReentrancyGuard {
-
     struct Item {
         uint256 id;
         address payable seller;
-        uint256 usdPrice;  // Precio FIJO en USD
+        uint256 usdPrice;
         bool exists;
         bool sold;
     }
 
     struct Escrow {
         address payable buyer;
-        uint256 amount; // ETH depositado
+        uint256 amount;
         bool active;
     }
 
-    // itemId => Item
     mapping(uint256 => Item) public items;
-
-    // itemId => Escrow
     mapping(uint256 => Escrow) public escrows;
 
-    event ItemListed(uint256 indexed itemId, address indexed seller, uint256 usdPrice);
-    event PurchaseStarted(uint256 indexed itemId, address indexed buyer, uint256 amount);
-    event PurchaseConfirmed(uint256 indexed itemId, address indexed buyer, address indexed seller, uint256 amount);
-    event PurchaseCancelled(uint256 indexed itemId, address indexed buyer, uint256 amount);
+    IERC20 public immutable paymentToken;
 
-    constructor(address owner_) Ownable(owner_) {}
+    event ItemListed(uint256 indexed itemId_, address indexed seller_, uint256 usdPrice_);
+    event PurchaseStarted(uint256 indexed itemId_, address indexed buyer_, uint256 amount_);
+    event PurchaseConfirmed(uint256 indexed itemId_, address indexed buyer_, address indexed seller_, uint256 amount_);
+    event PurchaseCancelled(uint256 indexed itemId_, address indexed buyer_, uint256 amount_);
 
-    // -----------------------------------
-    // ADMIN / SELLER: LISTAR ITEMS
-    // -----------------------------------
+    constructor(address owner_, address paymentToken_) Ownable(owner_) {
+        require(paymentToken_ != address(0), "20");
+        paymentToken = IERC20(paymentToken_);
+    }
 
-    function listItem(uint256 itemId, address payable seller, uint256 usdPrice)
-        external 
-        onlyOwner 
-    {
-        require(usdPrice > 0, "01");
-        require(!items[itemId].exists, "02");
-        require(seller != address(0), "03");
+    function listItem(uint256 itemId_, address payable seller_, uint256 usdPrice_) external onlyOwner {
+        require(usdPrice_ > 0, "01");
+        require(!items[itemId_].exists, "02");
+        require(seller_ != address(0), "03");
 
-        items[itemId] = Item({
-            id: itemId,
-            seller: seller,
-            usdPrice: usdPrice,
+        items[itemId_] = Item({
+            id: itemId_,
+            seller: seller_,
+            usdPrice: usdPrice_,
             exists: true,
             sold: false
         });
 
-        emit ItemListed(itemId, seller, usdPrice);
+        emit ItemListed(itemId_, seller_, usdPrice_);
     }
 
-    // -----------------------------------
-    // BUYER: INICIAR COMPRA (ESCROW)
-    // -----------------------------------
-
-    function startPurchase(uint256 itemId, uint256 requiredEth)
-        external 
-        payable 
-        nonReentrant 
-    {
-        Item storage item = items[itemId];
+    function startPurchase(uint256 itemId_, uint256 requiredEth_) external payable nonReentrant {
+        Item storage item = items[itemId_];
 
         require(item.exists, "04");
         require(!item.sold, "05");
-        require(!escrows[itemId].active, "10");
+        require(!escrows[itemId_].active, "10");
+        require(msg.value >= requiredEth_, "11");
 
-        // Pago dinámico basado en USD → ETH
-        require(msg.value >= requiredEth, "11");
-
-        escrows[itemId] = Escrow({
+        escrows[itemId_] = Escrow({
             buyer: payable(msg.sender),
             amount: msg.value,
             active: true
         });
 
-        emit PurchaseStarted(itemId, msg.sender, msg.value);
+        emit PurchaseStarted(itemId_, msg.sender, msg.value);
     }
 
-    // -----------------------------------
-    // BUYER: CONFIRMAR RECEPCION
-    // -----------------------------------
-
-    function confirmPurchase(uint256 itemId) external nonReentrant {
-        Item storage item = items[itemId];
-        Escrow storage esc = escrows[itemId];
+    function confirmPurchase(uint256 itemId_) external nonReentrant {
+        Item storage item = items[itemId_];
+        Escrow storage esc = escrows[itemId_];
 
         require(item.exists, "04");
         require(esc.active, "06");
         require(esc.buyer == msg.sender, "07");
         require(!item.sold, "05");
 
-        uint256 amount = esc.amount;
-        address payable seller = item.seller;
+        uint256 amount_ = esc.amount;
+        address payable seller_ = item.seller;
 
-        // UPDATE STATE
         item.sold = true;
         esc.active = false;
         esc.amount = 0;
 
-        // TRANSFER FUNDS
-        (bool sent, ) = seller.call{value: amount}("");
-        require(sent, "08");
-        emit PurchaseConfirmed(itemId, msg.sender, seller, amount);
+        (bool sent_, ) = seller_.call{ value: amount_ }("");
+        require(sent_, "08");
+
+        emit PurchaseConfirmed(itemId_, msg.sender, seller_, amount_);
     }
 
-    // -----------------------------------
-    // BUYER: CANCELAR COMPRA
-    // -----------------------------------
-
-    function cancelPurchase(uint256 itemId) external nonReentrant {
-        Item storage item = items[itemId];
-        Escrow storage esc = escrows[itemId];
+    function cancelPurchase(uint256 itemId_) external nonReentrant {
+        Item storage item = items[itemId_];
+        Escrow storage esc = escrows[itemId_];
 
         require(item.exists, "04");
         require(esc.active, "06");
         require(esc.buyer == msg.sender, "07");
         require(!item.sold, "05");
 
-        uint256 amount = esc.amount;
+        uint256 amount_ = esc.amount;
 
-        // UPDATE STATE
         esc.active = false;
         esc.amount = 0;
 
-        // REFUND
-        (bool sent, ) = esc.buyer.call{value: amount}("");
-        require(sent, "09");
-        emit PurchaseCancelled(itemId, msg.sender, amount);
+        (bool sent_, ) = esc.buyer.call{ value: amount_ }("");
+        require(sent_, "09");
+
+        emit PurchaseCancelled(itemId_, msg.sender, amount_);
     }
 
-    // -----------------------------------
-    // VIEW FUNCTIONS
-    // -----------------------------------
+    function buyDirect(uint256 itemId_, uint256 requiredEth_) external payable nonReentrant {
+        Item storage item = items[itemId_];
 
-    function getItem(uint256 itemId) external view returns (Item memory) {
-        return items[itemId];
+        require(item.exists, "04");
+        require(!item.sold, "05");
+        require(msg.value >= requiredEth_, "11");
+
+        item.sold = true;
+
+        (bool sent_, ) = item.seller.call{ value: msg.value }("");
+        require(sent_, "08");
+
+        emit PurchaseConfirmed(itemId_, msg.sender, item.seller, msg.value);
     }
 
-    function getEscrow(uint256 itemId) external view returns (Escrow memory) {
-        return escrows[itemId];
+    function buyDirectWithToken(uint256 itemId_, uint256 tokenAmount_) external nonReentrant {
+        Item storage item = items[itemId_];
+
+        require(item.exists, "04");
+        require(!item.sold, "05");
+        require(tokenAmount_ > 0, "13");
+
+        item.sold = true;
+
+        bool ok_ = paymentToken.transferFrom(msg.sender, item.seller, tokenAmount_);
+        require(ok_, "15");
+
+        emit PurchaseConfirmed(itemId_, msg.sender, item.seller, tokenAmount_);
     }
 
-    
-    function _forceSetSold(uint256 itemId) external { //  -----> ONLY FOR TESTING — DO NOT DEPLOY IN PRODUCTION
-        items[itemId].sold = true;
+    function getItem(uint256 itemId_) external view returns (Item memory) {
+        return items[itemId_];
+    }
+
+    function getEscrow(uint256 itemId_) external view returns (Escrow memory) {
+        return escrows[itemId_];
+    }
+
+    function _forceSetSold(uint256 itemId_) external onlyOwner {
+        items[itemId_].sold = true;
     }
 }

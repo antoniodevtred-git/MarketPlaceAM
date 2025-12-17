@@ -1,1 +1,1 @@
-testStartPurchaseRevertsIfAlreadySold
+testBuyDirectWithTokenRevertsIfZeroAmount
