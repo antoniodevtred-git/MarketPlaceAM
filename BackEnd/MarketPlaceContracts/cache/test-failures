@@ -1,1 +1,1 @@
-testBuyDirectWithTokenRevertsIfNoApprovalOrBalance
+testBuyDirectWithTokenRevertsIfZeroAmount

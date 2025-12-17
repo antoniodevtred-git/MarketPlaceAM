@@ -318,7 +318,7 @@ contract EscrowMarketplaceTest is Test {
         createItem();
 
         vm.prank(buyer);
-        vm.expectRevert(bytes("15"));
+        vm.expectRevert(bytes("13"));
         marketplace.buyDirectWithToken(itemId, 0);
     }
 
