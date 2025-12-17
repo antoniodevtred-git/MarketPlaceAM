@@ -40,8 +40,8 @@ contract MarketStaking is Ownable, ReentrancyGuard {
     // ===== Stake =====
 
     function deposit(uint256 amount_) external nonReentrant {
-        require(amount_ == fixedStakeAmount, "01");
-        require(userBalance[msg.sender] == 0, "02");
+        require(amount_ == fixedStakeAmount, "16");
+        require(userBalance[msg.sender] == 0, "17");
 
         // EFFECTS
         userBalance[msg.sender] = amount_;
@@ -72,19 +72,19 @@ contract MarketStaking is Ownable, ReentrancyGuard {
     // ===== Rewards =====
 
     function claimRewards() external nonReentrant {
-        require(userBalance[msg.sender] == fixedStakeAmount, "03");
+        require(userBalance[msg.sender] == fixedStakeAmount, "18");
 
         uint256 elapsed = block.timestamp - lastClaimAt[msg.sender];
-        require(elapsed >= stakingPeriod, "04");
+        require(elapsed >= stakingPeriod, "19");
 
         // EFFECTS
         lastClaimAt[msg.sender] = block.timestamp;
 
-        require(address(this).balance >= rewardPerPeriod, "05");
+        require(address(this).balance >= rewardPerPeriod, "20");
 
         // INTERACTIONS
         (bool ok, ) = payable(msg.sender).call{value: rewardPerPeriod}("");
-        require(ok, "06");
+        require(ok, "21");
 
         emit RewardClaimed(msg.sender, rewardPerPeriod);
     }
@@ -92,7 +92,7 @@ contract MarketStaking is Ownable, ReentrancyGuard {
     // ===== Admin =====
 
     function changeStakingPeriod(uint256 newStakingPeriod_) external onlyOwner {
-        require(newStakingPeriod_ > 0, "08");
+        require(newStakingPeriod_ > 0, "23");
         stakingPeriod = newStakingPeriod_;
         emit ChangeStakingPeriod(newStakingPeriod_);
     }
