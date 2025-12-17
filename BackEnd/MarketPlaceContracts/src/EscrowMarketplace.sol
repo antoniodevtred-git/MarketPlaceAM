@@ -161,7 +161,7 @@ contract EscrowMarketplace is Ownable, ReentrancyGuard {
 
         // INTERACTIONS
         bool ok = paymentToken.transferFrom(msg.sender, item.seller, tokenAmount);
-        require(ok, "15"); // TOKEN_TRANSFER_FAILED
+        require(ok, "15"); 
 
         emit PurchaseConfirmed(itemId, msg.sender, item.seller, tokenAmount);
     }
