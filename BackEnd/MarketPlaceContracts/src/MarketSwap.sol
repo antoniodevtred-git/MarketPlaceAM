@@ -26,27 +26,18 @@ contract MarketSwap is Ownable {
         require(tokenIn_ != address(0), "14");
         require(amountIn_ > 0, "13");
         require(path_.length >= 2, "14");
+        require(path_[0] == tokenIn_, "14");
         require(path_[path_.length - 1] == marketToken, "14");
         require(deadline_ >= block.timestamp, "19");
 
         // Pull tokens from user
-        IERC20(tokenIn_).safeTransferFrom(
-            msg.sender,
-            address(this),
-            amountIn_
-        );
+        IERC20(tokenIn_).safeTransferFrom(msg.sender, address(this),amountIn_);
 
         // Approve router
         IERC20(tokenIn_).forceApprove(address(router), amountIn_);
 
         // Swap
-        uint256[] memory amounts = router.swapExactTokensForTokens(
-            amountIn_,
-            amountOutMin_,
-            path_,
-            msg.sender,
-            deadline_
-        );
+        uint256[] memory amounts = router.swapExactTokensForTokens(amountIn_, amountOutMin_, path_, msg.sender, deadline_);
 
         emit TokensSwapped(msg.sender, tokenIn_, amountIn_, amounts[amounts.length - 1]);
     }
