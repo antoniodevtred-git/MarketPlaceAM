@@ -35,7 +35,7 @@ contract TokenizerNFTTest is Test {
 
     function testTokenizeRevertsIfZeroAddress() public {
         vm.prank(owner);
-        vm.expectRevert(bytes("12"));
+        vm.expectRevert(bytes("12")); // INVALID_ADDRESS
         tokenizer.tokenize(address(0), itemId, "ipfs://asset");
     }
 
@@ -44,7 +44,7 @@ contract TokenizerNFTTest is Test {
         tokenizer.tokenize(user, itemId, "ipfs://asset");
 
         vm.prank(owner);
-        vm.expectRevert(bytes("16"));
+        vm.expectRevert(bytes("24")); // NFT_ALREADY_EXISTS
         tokenizer.tokenize(user, itemId, "ipfs://asset2");
     }
 }
