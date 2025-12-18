@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity 0.8.24;
 
 import "../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
@@ -14,20 +13,24 @@ contract MarketStaking is Ownable, ReentrancyGuard {
 
     uint256 public stakingPeriod;
     uint256 public fixedStakeAmount;
-    uint256 public rewardPerPeriod; // in wei
+    uint256 public rewardPerPeriod; // wei
 
     mapping(address => uint256) public userBalance;
     mapping(address => uint256) public lastClaimAt;
 
-    event DepositTokens(address userAddress_, uint256 depositAmount_);
-    event WithdrawTokens(address indexed user_, uint256 amoun_);
+    event DepositTokens(address indexed user_, uint256 amount_);
+    event WithdrawTokens(address indexed user_, uint256 amount_);
     event RewardClaimed(address indexed user_, uint256 amount_);
-    event ChangeStakingPeriod(uint256 newStakingPeriod);
-    event EtherFunded(uint256 amount);
+    event ChangeStakingPeriod(uint256 newStakingPeriod_);
+    event EtherFunded(uint256 amount_);
 
-
-
-    constructor(address stakingToken_,address owner_,uint256 stakingPeriod_,uint256 fixedStakeAmount_,uint256 rewardPerPeriod_) Ownable(owner_) {
+    constructor(
+        address stakingToken_,
+        address owner_,
+        uint256 stakingPeriod_,
+        uint256 fixedStakeAmount_,
+        uint256 rewardPerPeriod_
+    ) Ownable(owner_) {
         require(stakingToken_ != address(0), "22");
         require(stakingPeriod_ > 0, "23");
 
@@ -43,11 +46,9 @@ contract MarketStaking is Ownable, ReentrancyGuard {
         require(amount_ == fixedStakeAmount, "16");
         require(userBalance[msg.sender] == 0, "17");
 
-        // EFFECTS
         userBalance[msg.sender] = amount_;
         lastClaimAt[msg.sender] = block.timestamp;
 
-        // INTERACTIONS
         stakingToken.safeTransferFrom(msg.sender, address(this), amount_);
 
         emit DepositTokens(msg.sender, amount_);
@@ -58,10 +59,8 @@ contract MarketStaking is Ownable, ReentrancyGuard {
     function withdraw() external nonReentrant {
         uint256 balance = userBalance[msg.sender];
 
-        // EFFECTS
         userBalance[msg.sender] = 0;
 
-        // INTERACTIONS
         if (balance > 0) {
             stakingToken.safeTransfer(msg.sender, balance);
         }
@@ -77,12 +76,10 @@ contract MarketStaking is Ownable, ReentrancyGuard {
         uint256 elapsed = block.timestamp - lastClaimAt[msg.sender];
         require(elapsed >= stakingPeriod, "19");
 
-        // EFFECTS
         lastClaimAt[msg.sender] = block.timestamp;
 
         require(address(this).balance >= rewardPerPeriod, "20");
 
-        // INTERACTIONS
         (bool ok, ) = payable(msg.sender).call{value: rewardPerPeriod}("");
         require(ok, "21");
 
@@ -97,12 +94,7 @@ contract MarketStaking is Ownable, ReentrancyGuard {
         emit ChangeStakingPeriod(newStakingPeriod_);
     }
 
-    /// @notice Owner funds ETH rewards
     receive() external payable onlyOwner {
         emit EtherFunded(msg.value);
     }
-
-
-
-
 }
