@@ -59,7 +59,7 @@ contract MarketplaceAsset is ERC721URIStorage, Ownable {
         string calldata uri_
     ) external onlyOwner returns (uint256 tokenId_) {
 
-        require(to_ != address(0), "12"); // INVALID_ADDRESS
+        require(to_ != address(0), "12");
 
         tokenId_ = nextTokenId;
         nextTokenId++;
@@ -84,7 +84,7 @@ contract MarketplaceAsset is ERC721URIStorage, Ownable {
         view
         returns (AssetType)
     {
-        require(assetData[tokenId_].exists, "04"); // INVALID_ITEM
+        require(assetData[tokenId_].exists, "04");
         return assetData[tokenId_].assetType;
     }
 }

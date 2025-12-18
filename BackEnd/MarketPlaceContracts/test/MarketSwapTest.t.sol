@@ -16,6 +16,7 @@ contract MarketSwapTest is Test {
     address owner = address(1);
     address user  = address(2);
 
+
     function setUp() public {
         router = new MockV2Router02();
 
@@ -39,7 +40,8 @@ contract MarketSwapTest is Test {
     // ------------------------------------------------------------
 
     function testSwapWorks() public {
-        address;
+        address[] memory path = new address[](2);
+
         path[0] = address(tokenIn);
         path[1] = address(marketToken);
 
@@ -59,7 +61,8 @@ contract MarketSwapTest is Test {
     }
 
     function testSwapEmitsEvent() public {
-        address;
+        address[] memory path = new address[](2);
+
         path[0] = address(tokenIn);
         path[1] = address(marketToken);
 
@@ -86,7 +89,8 @@ contract MarketSwapTest is Test {
     // ------------------------------------------------------------
 
     function testRevertIfAmountZero() public {
-        address;
+        address[] memory path = new address[](2);
+
         path[0] = address(tokenIn);
         path[1] = address(marketToken);
 
@@ -102,8 +106,9 @@ contract MarketSwapTest is Test {
     }
 
     function testRevertIfTokenInZero() public {
-        address;
-        path[0] = address(0);
+        address[] memory path = new address[](2);
+
+        path[0] = address(tokenIn);
         path[1] = address(marketToken);
 
         vm.prank(user);
@@ -118,7 +123,8 @@ contract MarketSwapTest is Test {
     }
 
     function testRevertIfPathTooShort() public {
-        address;
+        address[] memory path = new address[](2);
+
         path[0] = address(tokenIn);
 
         vm.prank(user);
@@ -133,7 +139,8 @@ contract MarketSwapTest is Test {
     }
 
     function testRevertIfPathDoesNotEndInMarketToken() public {
-    
+        address[] memory path = new address[](2);
+
         path[0] = address(tokenIn);
         path[1] = address(tokenIn);
 
