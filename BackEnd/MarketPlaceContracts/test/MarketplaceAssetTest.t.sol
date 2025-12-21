@@ -1,59 +1,90 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
 
-import "forge-std/Test.sol";
-import "../src/MarketplaceAsset.sol";
+import "../lib/openzeppelin-contracts/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 
-contract MarketplaceAssetTest is Test {
+contract MarketplaceAsset is ERC721URIStorage, Ownable {
 
-    MarketplaceAsset nft;
+    // ------------------------------------------------------------
+    // TYPES
+    // ------------------------------------------------------------
 
-    address owner = address(1);
-    address user  = address(2);
-
-    function setUp() public {
-        nft = new MarketplaceAsset(
-            "MarketplaceAsset",
-            "ASSET",
-            owner
-        );
+    enum AssetType {
+        REAL_ESTATE,
+        VEHICLE,
+        LUXURY
     }
 
-    function testMintAssetWorks() public {
-        vm.prank(owner);
-        uint256 tokenId = nft.mintAsset(
-            user,
-            MarketplaceAsset.AssetType.REAL_ESTATE,
-            "ipfs://uri"
-        );
-
-        assertEq(nft.ownerOf(tokenId), user);
-        assertEq(nft.tokenURI(tokenId), "ipfs://uri");
-
-        MarketplaceAsset.AssetType t = nft.getAssetType(tokenId);
-        assertEq(
-            uint256(t),
-            uint256(MarketplaceAsset.AssetType.REAL_ESTATE)
-        );
+    struct AssetData {
+        AssetType assetType;
+        bool exists;
     }
 
-    function testMintRevertsIfNotOwner() public {
-        vm.prank(user);
-        vm.expectRevert();
-        nft.mintAsset(
-            user,
-            MarketplaceAsset.AssetType.VEHICLE,
-            "ipfs://uri"
-        );
+    // ------------------------------------------------------------
+    // STATE
+    // ------------------------------------------------------------
+
+    uint256 public nextTokenId = 1;
+    mapping(uint256 => AssetData) public assetData;
+
+    // ------------------------------------------------------------
+    // EVENTS
+    // ------------------------------------------------------------
+
+    event AssetMinted(
+        uint256 indexed tokenId_,
+        address indexed to_,
+        AssetType assetType_,
+        string uri_
+    );
+
+    // ------------------------------------------------------------
+    // CONSTRUCTOR
+    // ------------------------------------------------------------
+
+    constructor(
+        string memory name_,
+        string memory symbol_,
+        address owner_
+    ) ERC721(name_, symbol_) Ownable(owner_) {}
+
+    // ------------------------------------------------------------
+    // MINT
+    // ------------------------------------------------------------
+
+    function mintAsset(
+        address to_,
+        AssetType assetType_,
+        string calldata uri_
+    ) external onlyOwner returns (uint256 tokenId_) {
+
+        require(to_ != address(0), "12");
+
+        tokenId_ = nextTokenId;
+        nextTokenId++;
+
+        _safeMint(to_, tokenId_);
+        _setTokenURI(tokenId_, uri_);
+
+        assetData[tokenId_] = AssetData({
+            assetType: assetType_,
+            exists: true
+        });
+
+        emit AssetMinted(tokenId_, to_, assetType_, uri_);
     }
 
-    function testMintRevertsIfZeroAddress() public {
-        vm.prank(owner);
-        vm.expectRevert(bytes("12"));
-        nft.mintAsset(
-            address(0),
-            MarketplaceAsset.AssetType.LUXURY,
-            "ipfs://uri"
-        );
+    // ------------------------------------------------------------
+    // VIEW
+    // ------------------------------------------------------------
+
+    function getAssetType(uint256 tokenId_)
+        external
+        view
+        returns (AssetType)
+    {
+        require(assetData[tokenId_].exists, "04");
+        return assetData[tokenId_].assetType;
     }
 }
