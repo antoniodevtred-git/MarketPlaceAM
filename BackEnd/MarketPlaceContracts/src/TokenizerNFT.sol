@@ -39,8 +39,8 @@ contract TokenizerNFT is ERC721URIStorage, Ownable {
         onlyOwner
         returns (uint256 tokenId_)
     {
-        require(to_ != address(0), "12");              // INVALID_ADDRESS
-        require(itemToToken[itemId_] == 0, "24");      // NFT_ALREADY_EXISTS
+        require(to_ != address(0), "12");             
+        require(itemToToken[itemId_] == 0, "24");      
 
         tokenId_ = nextTokenId++;
         _safeMint(to_, tokenId_);
